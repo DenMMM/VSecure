@@ -21,6 +21,7 @@ DWORD LastCaptureTime;
 SYSTEMTIME LastFileTime;
 char File[MAX_PATH];
 DWORD FlushCount;
+DWORD LimitCount;
 //---------------------------------------------------------------------------
 VOID WINAPI Handler(DWORD fdwControl)
 {
@@ -81,20 +82,22 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     AVIFileInit();
 
     // Очищаем директорию от лишних файлов
-    FreeDirectory(Options.Directory, Options.FilesSize);
-    // Берем текущее время
-    ::GetLocalTime(&LastFileTime);
-    // Формируем новое имя файла
-    SetFileName(File, Options.Directory, &LastFileTime);
+    FreeDirectory(Options.Directory,Options.FilesSize);
     // Подготавливаем компрессор к сжатию последовательности кадров
     Compressor.BeginCompress(&CaptureFormat);
+    // Берем текущее время для создания файла
+    CheckNewFileTime(&LastFileTime,-1);
+    // Формируем новое имя файла
+    SetFileName(File,Options.Directory,&LastFileTime);
     // Создаем файл
     AVIFile.Create(File,Options.CodecHandler,Options.Quality,
         Compressor.GetOutputFormat(),Options.FrameRate);
     // Начинаем захват картинки
     LastCaptureTime=-1; Capture.Begin();
     // Сбрасываем счетчик автозакрытия файла
-    FlushCount=0; CheckFlushTime(&FlushCount,0);
+    CheckFlushTime(&FlushCount,0);
+    // Сбрасываем счетчик аварийной смены файла
+    CheckFlushTime(&LimitCount,0);
 
     // Информируем SCM об успешном запуске службы
     service_status.dwCurrentState=SERVICE_RUNNING;
@@ -106,24 +109,30 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
 
     while(true)
     {
-        // Проверяем не пора ли заводить новый файл
-        if ( CheckNewFileTime(&LastFileTime,&LastFileTime,Options.NewFileTime) )
+        // Проверяем не пора ли заводить новый файл по выставленному в настройках времени
+        // или из-за превышения предельной длительности по времени
+        if ( CheckNewFileTime(&LastFileTime,Options.NewFileTime)||
+            CheckFlushTime(&LimitCount,25*60*60) )
         {
             // Останавливаем захват картинки, завершаем сжатие, закрываем файл
             Capture.End(); Compressor.EndCompress(); AVIFile.Close();
             // Очищаем директорию от лишних файлов
-            FreeDirectory(Options.Directory, Options.FilesSize);
-            // Формируем новое имя файла
-            SetFileName(File, Options.Directory, &LastFileTime);
+            FreeDirectory(Options.Directory,Options.FilesSize);
             // Подготавливаем компрессор к сжатию последовательности кадров
             Compressor.BeginCompress(&CaptureFormat);
+            // Берем текущее время для создания файла
+            CheckNewFileTime(&LastFileTime,-1);
+            // Формируем новое имя файла
+            SetFileName(File,Options.Directory,&LastFileTime);
             // Создаем файл
             AVIFile.Create(File,Options.CodecHandler,Options.Quality,
                 Compressor.GetOutputFormat(),Options.FrameRate);
             // Начинаем захват картинки
             LastCaptureTime=-1; Capture.Begin();
             // Сбрасываем счетчик автозакрытия файла
-            FlushCount=0; CheckFlushTime(&FlushCount,0);
+            CheckFlushTime(&FlushCount,0);
+            // Сбрасываем счетчик аварийной смены файла
+            CheckFlushTime(&LimitCount,0);
         } else if ( CheckFlushTime(&FlushCount,2*60) )
         {
             // Останавливаем захват картинки, закрываем файл
@@ -133,7 +142,7 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
             // Начинаем захват картинки
             LastCaptureTime=-1; Capture.Begin();
             // Сбрасываем счетчик автозакрытия файла
-            FlushCount=0; CheckFlushTime(&FlushCount,0);
+            CheckFlushTime(&FlushCount,0);
         }
 
         // Проверяем очередь сообщений
@@ -155,7 +164,7 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     service_status.dwWaitHint=0;
     ::SetServiceStatus(service_status_handle,&service_status);
 
-    // Останавливаем захват картинки и освобождем ресурсы, связанные с видеозахватом
+    // Останавливаем захват картинки и освобождаем ресурсы, связанные с видеозахватом
     Capture.End(); Capture.Disconnect(); delete[] DataForCompress;
     ServiceStartProcess();
     //
@@ -180,28 +189,31 @@ void ServiceStartProcess()
     ::SetServiceStatus(service_status_handle,&service_status);
 }
 //---------------------------------------------------------------------------
-bool CheckNewFileTime(LPSYSTEMTIME lpOldTime, LPSYSTEMTIME lpNewTime, int TimeToNewFile)
+bool CheckNewFileTime(LPSYSTEMTIME lpOldTime, int TimeToNewFile)
 {
-    SYSTEMTIME ssCurrentTime, ssTargetTime;
-    FILETIME flCurrentTime, flTargetTime, flOldTime;
+    SYSTEMTIME ssCurrentTime;
+    int iTargetTime=TimeToNewFile*60*1000;
 
     // Определяем текущее локальное время
     ::GetLocalTime(&ssCurrentTime);
-    ::SystemTimeToFileTime(&ssCurrentTime,&flCurrentTime);
-    // Формируем целевое время из текущей даты и заданного времени суток
-    memcpy(&ssTargetTime,&ssCurrentTime,sizeof(SYSTEMTIME));
-    ssTargetTime.wHour=TimeToNewFile/60;
-    ssTargetTime.wMinute=TimeToNewFile%60;
-    ssTargetTime.wSecond=ssTargetTime.wMilliseconds=0;
-    ::SystemTimeToFileTime(&ssTargetTime,&flTargetTime);
-    // Сравниваем текущее время с целевым
-    if ( ::CompareFileTime(&flCurrentTime,&flTargetTime)==-1 ) return false;
     //
-    ::SystemTimeToFileTime(lpOldTime,&flOldTime);
-    // Проверяем не стало ли целевое время больше времени создания файла
-    if ( ::CompareFileTime(&flTargetTime,&flOldTime)==1 )
-        { memcpy(lpNewTime,&ssCurrentTime,sizeof(SYSTEMTIME)); return true; }
-    else return false;
+    if ( TimeToNewFile==-1 )
+        { memcpy(lpOldTime,&ssCurrentTime,sizeof(SYSTEMTIME)); return false; }
+    // Сравниваем текущее время с целевым
+    if ( GetTimeOfSystemTime(&ssCurrentTime)<iTargetTime ) return false;
+    // Сравниваем время создания последнего файла с целевым временем
+    if ( (ssCurrentTime.wYear==lpOldTime->wYear)&&
+        (ssCurrentTime.wMonth==lpOldTime->wMonth)&&
+        (ssCurrentTime.wDay==lpOldTime->wDay)&&
+        (GetTimeOfSystemTime(lpOldTime)>=iTargetTime) ) return false;
+
+    return true;
+}
+//---------------------------------------------------------------------------
+int GetTimeOfSystemTime(LPSYSTEMTIME lpTime)
+{
+    return lpTime->wHour*(60*60*1000)+lpTime->wMinute*(60*1000)+
+        lpTime->wSecond*(1000)+lpTime->wMilliseconds;
 }
 //---------------------------------------------------------------------------
 int SetFileName(char *Name, char *Directory, SYSTEMTIME *Time)
@@ -260,11 +272,13 @@ bool CheckFlushTime(DWORD *OldCount, int Seconds)
 {
     DWORD Count;
 
+    //
     Count=::GetTickCount();
-    if ( *OldCount==0 ) { *OldCount=Count; return false; }
-    if ( Count>=(*OldCount+Seconds*1000) ) { *OldCount=Count; return true; }
+    if ( Seconds==0 ) { *OldCount=Count; return false; }
+    //
+    if ( Count<(*OldCount+Seconds*1000) ) return false;
 
-    return false;
+    return true;
 }
 //---------------------------------------------------------------------------
 LRESULT CALLBACK capVideoStreamCallback(HWND hWnd, LPVIDEOHDR lpVHdr)

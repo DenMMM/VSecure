@@ -21,7 +21,8 @@ extern SERVICE_STATUS service_status;
 VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv);
 void ServiceStartProcess();
 LRESULT CALLBACK capVideoStreamCallback(HWND hWnd, LPVIDEOHDR lpVHdr);
-bool CheckNewFileTime(LPSYSTEMTIME lpOldTime, LPSYSTEMTIME lpNewTime, int TimeToNewFile);
+bool CheckNewFileTime(LPSYSTEMTIME lpOldTime, int TimeToNewFile);
+int GetTimeOfSystemTime(LPSYSTEMTIME lpTime);
 int SetFileName(char *Name, char *Directory, SYSTEMTIME *Time);
 bool FreeDirectory(char *Dir, int MaxSize);
 bool CheckFlushTime(DWORD *OldCount, int Seconds);
@@ -37,6 +38,7 @@ extern DWORD LastCaptureTime;
 extern SYSTEMTIME LastFileTime;
 extern char File[MAX_PATH];
 extern DWORD FlushCount;
+extern DWORD LimitCount;
 //---------------------------------------------------------------------------
 #endif
 
