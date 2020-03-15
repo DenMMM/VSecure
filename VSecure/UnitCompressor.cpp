@@ -27,7 +27,7 @@ void MCompressor::SetParam(LONG lKey, LONG lDataRate, LONG lQ,
 //    if ( lpSpecData ) ICSetState(Compressor.hic,lpSpecData,dwDataSize);
 }
 //---------------------------------------------------------------------------
-void MCompressor::BeginCompress(BITMAPINFO *CaptureFormat)
+bool MCompressor::BeginCompress(BITMAPINFO *CaptureFormat)
 {
     // Начинаем сжатие
     memset(&InputFormat,0,sizeof(InputFormat));
@@ -37,7 +37,7 @@ void MCompressor::BeginCompress(BITMAPINFO *CaptureFormat)
     InputFormat.bmiHeader.biPlanes=1;
     InputFormat.bmiHeader.biBitCount=24;
     InputFormat.bmiHeader.biCompression=BI_RGB;
-    ICSeqCompressFrameStart(&Compressor,&InputFormat);
+    return ICSeqCompressFrameStart(&Compressor,&InputFormat);
 }
 //---------------------------------------------------------------------------
 LPVOID MCompressor::Compress(LPVOID lpBits, BOOL *pfKey, LONG *plSize)

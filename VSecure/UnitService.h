@@ -9,6 +9,7 @@
 #include "UnitCapture.h"
 #include "UnitCompressor.h"
 #include "UnitAVIFile.h"
+#include "UnitLog.h"
 //---------------------------------------------------------------------------
 #define scmSTOP WM_USER+1
 #define scmINTERROGATE WM_USER+2
@@ -37,8 +38,10 @@ extern char *DataForCompress;
 extern DWORD LastCaptureTime;
 extern SYSTEMTIME LastFileTime;
 extern char File[MAX_PATH];
-extern DWORD FlushCount;
+/*extern DWORD FlushCount;*/
 extern DWORD LimitCount;
+
+extern MLog Log;
 //---------------------------------------------------------------------------
 #endif
 

@@ -5,11 +5,11 @@
 //---------------------------------------------------------------------------
 #pragma package(smart_init)
 //---------------------------------------------------------------------------
-void MAVIFile::Create(LPCTSTR szFile, DWORD fccHandler, DWORD dwQuality,
+bool MAVIFile::Create(LPCTSTR szFile, DWORD fccHandler, DWORD dwQuality,
     LPBITMAPINFO lpbiOut, DWORD dwRate)
 {
     // Создаем файл
-    AVIFileOpen(&pAVIFile,szFile,OF_CREATE|OF_WRITE|OF_SHARE_EXCLUSIVE,NULL);
+    if ( AVIFileOpen(&pAVIFile,szFile,OF_CREATE|OF_WRITE|OF_SHARE_EXCLUSIVE,NULL) ) return false;
     lAVIPos=0;
     // Заполняем структуру, определяющую основные параметры содержимого потока
     memset(&streaminfo,0,sizeof(streaminfo));
@@ -21,12 +21,14 @@ void MAVIFile::Create(LPCTSTR szFile, DWORD fccHandler, DWORD dwQuality,
     streaminfo.rcFrame.right=lpbiOut->bmiHeader.biWidth;
     streaminfo.rcFrame.bottom=lpbiOut->bmiHeader.biHeight;
     // Создаем поток в файле
-    AVIFileCreateStream(pAVIFile,&pAVIStream,&streaminfo);
+    if ( AVIFileCreateStream(pAVIFile,&pAVIStream,&streaminfo) ) return false;
     // Устанавливаем формат потока
-    AVIStreamSetFormat(pAVIStream,lAVIPos,lpbiOut,sizeof(BITMAPINFO));
+    if ( AVIStreamSetFormat(pAVIStream,lAVIPos,lpbiOut,sizeof(BITMAPINFO)) ) return false;
+
+    return true;
 }
 //---------------------------------------------------------------------------
-void MAVIFile::Open(LPCTSTR szFile, DWORD fccHandler)
+/*bool MAVIFile::Open(LPCTSTR szFile, DWORD fccHandler)
 {
     // Открываем файл
     AVIFileOpen(&pAVIFile,szFile,OF_READWRITE|OF_SHARE_EXCLUSIVE,NULL);
@@ -35,21 +37,26 @@ void MAVIFile::Open(LPCTSTR szFile, DWORD fccHandler)
     AVIFileGetStream(pAVIFile,&pAVIStream,streamtypeVIDEO,0);
     // Определяем количество записей в файле
     lAVIPos=AVIStreamLength(pAVIStream);
-}
+
+    return true;
+}*/
 //---------------------------------------------------------------------------
-void MAVIFile::Write(LPVOID lpData, LONG lDataSize, BOOL fKeyFrame)
+bool MAVIFile::Write(LPVOID lpData, LONG lDataSize, BOOL fKeyFrame)
 {
-    AVIStreamWrite(pAVIStream,lAVIPos,1,lpData,lDataSize,
-        fKeyFrame?AVIIF_KEYFRAME:0,NULL,NULL);
+    if ( AVIStreamWrite(pAVIStream,lAVIPos,1,lpData,lDataSize,
+        fKeyFrame?AVIIF_KEYFRAME:0,NULL,NULL) ) return false;
     lAVIPos++;
+    return true;
 }
 //---------------------------------------------------------------------------
-void MAVIFile::Close()
+bool MAVIFile::Close()
 {
     // Закрываем поток в файле
     AVIStreamRelease(pAVIStream);
     // Закрываем файл
     AVIFileRelease(pAVIFile);
+
+    return true;
 }
 //---------------------------------------------------------------------------
 
