@@ -1,0 +1,10 @@
+USEUNIT("UnitMain.cpp");
+USEUNIT("UnitService.cpp");
+USEUNIT("UnitOptions.cpp");
+USEUNIT("UnitCompressor.cpp");
+USEUNIT("UnitAVIFile.cpp");
+USEUNIT("UnitCapture.cpp");
+//---------------------------------------------------------------------------
+This file is used by the project manager only and should be treated like the project file
+
+WinMain
